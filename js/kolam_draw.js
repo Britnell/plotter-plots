@@ -1,0 +1,1178 @@
+
+paper.install(window);
+
+var kolam;
+
+window.onload = function() {
+	// * Setup
+	paper.setup('papercanvas');
+	const tool = new Tool();
+	const static = new PaperTool()
+
+	var node_count = 0;
+	var grid = 20;
+	var  nr = 0.25;	// how close line stays to dots
+	var lineWidth = 2;
+	var tree_size = 600;
+	var p_remove = 0.1;
+	var p_join = 0.1;
+	var str_th = 3 
+	// var p_grow = the rest
+
+
+	function first_node(){
+		let net = [];
+		let struct = {
+			id: 0,
+			u: null,
+			d: null,
+			l: null,
+			r: null,
+			index: [0,0],
+			connections: [],
+			point: null
+		}
+		net.push(struct);
+		return net;
+	}
+
+	function step_vec(dir,mag){
+		let angle;
+		if(dir=='r')
+			angle = 0;
+		else if(dir=='d')
+			angle = 90;
+		else if(dir=='l')
+			angle = 180;
+		else if(dir=='u')
+			angle = 270;
+
+		return new Point({
+			length: grid*mag,
+			angle: angle
+		});
+	}
+
+	function new_node(id){
+		let struct = {
+			id: id,
+			u: null,
+			d: null,
+			l: null,
+			r: null,
+			connections: []
+		}
+		return struct;
+	}
+
+	function opposite_dir(dir){
+		if(dir=='u')
+			return 'd';
+		if(dir=='d')
+			return 'u';
+		if(dir=='l')
+			return 'r';
+		if(dir=='r')
+			return 'l';
+	}
+
+	function step_index(index, dir){
+		let next = index.slice();
+		if(dir=='u')
+			next[1]++;
+		else if(dir=='d')
+			next[1]--;
+		else if(dir=='l')
+			next[0]--;
+		else if(dir=='r')
+			next[0]++;
+		return next;
+	}
+	
+	function add_node(net, node, dir){
+		let neu = new_node(net.length);
+		node[dir] = neu;
+		node.connections.push(dir);
+
+		let opp = opposite_dir(dir);
+		neu[opp] = node;
+		neu.connections.push(opp);
+		neu.index = step_index(node.index,dir);
+
+		let pos = step_vec(dir,1).add(node.point);
+		neu.point = pos;
+
+		net.push(neu);
+		return neu;
+	}
+
+	// adds 2 nodes e.g. up and right, and a third connected to both
+	function add_square(net, node, dirs){
+		// references
+		let dirA = dirs[0];
+		let dirB = dirs[1];
+		let oppA = opposite_dir(dirA);
+		let oppB = opposite_dir(dirB);
+		let newA = add_node(net,node, dirA);
+		let newB = add_node(net,node, dirB);
+		// ready
+		let third = new_node(net.length);
+		third.connections = [oppA, oppB ];
+		newA.connections.push(dirB);
+		newB.connections.push(dirA);
+		third[oppB] = newA;
+		third[oppA] = newB;
+		third.point = node.point.add(step_vec(dirA,1)).add(step_vec(dirB,1));
+		let idx = step_index(node.index,dirA);
+		third.index = step_index(idx,dirB); 
+		net.push(third);
+	}
+	
+	function mid_point(node,dir){
+		let pos = step_vec(dir, 0.5).add(node.point);
+		return pos;
+	}
+
+	function draw_net(net){
+		kolam = new Group();
+		net.forEach( (node)=>{
+			// 
+			kolam.addChild(draw_node(node));
+		});
+		return kolam;
+	}
+
+
+	
+
+	function draw_node(node){
+		let conns = node.connections;
+		if(conns.length==0){
+			return draw_circle(node);
+		}
+		else if(conns.length==1){
+			return draw_tip(node);
+		}
+		else if(conns.length==2){
+			if(conns.includes('u') && conns.includes('d') )
+				return draw_straight(node);
+			if(conns.includes('l') && conns.includes('r') )
+				return draw_straight(node);
+			else 
+				return draw_corner(node);
+		}
+		else if(conns.length==3){
+			return draw_trig(node);
+		}
+		else if(conns.length==4){
+			return draw_cross(node);
+		}
+		// return null;
+	}
+
+	function draw_circle(node){
+		let path = new Path.Circle({
+			center: node.point,
+			radius: grid*nr
+		});
+		return path;
+	}
+	function draw_tip(node){
+		let dir = node.connections[0];
+		let opp = opposite_dir(dir);
+		let knot = mid_point(node,dir);
+		let near;
+		let path = new Path();
+		
+		path.add(knot);
+		near = step_vec(dir,nr).rotate(90);
+		path.add(new Segment({
+			point: node.point.add(near),
+			handleIn: step_vec(dir, 0.3),
+			handleOut: step_vec(opp, 0.4),
+		}));
+		path.add(new Segment({
+			point: node.point.add(near.rotate(180)),
+			handleIn: step_vec(opp, 0.4),
+			handleOut: step_vec(dir, 0.3),
+		}));
+		path.add(knot);
+		return path;
+	}
+
+
+	function draw_straight(node){
+		let dir = node.connections[0];
+		let opp = opposite_dir(dir);
+
+		let knotA = mid_point(node,dir);
+		let knotB = mid_point(node,opp);
+
+		let near;
+
+		let path = new Path();
+		// first side
+		near = step_vec(dir,nr).rotate(90);
+		path.add(knotA);
+		path.add(new Segment({
+			point: node.point.add(near),
+			handleIn: step_vec(dir,0.3),
+			handleOut: step_vec(opp,0.3)
+		}));
+		path.add(knotB);
+		path.add(new Segment({
+			point: node.point.add(near.rotate(180)),
+			handleIn: step_vec(opp,0.3),
+			handleOut: step_vec(dir,0.3)
+		}));
+		path.add(knotA);
+		return path;
+		// 
+	}
+
+	// returns the 2 connections of a node in clockwise order
+	function get_pair_in_order(dirs){
+		if(dirs.includes('u')&&dirs.includes('r'))
+			return ['u','r'];
+		if(dirs.includes('r')&&dirs.includes('d'))
+			return ['r','d'];
+		if(dirs.includes('d')&&dirs.includes('l'))
+			return ['d','l'];
+		if(dirs.includes('l')&&dirs.includes('u'))
+			return ['l','u'];
+	}
+
+	function draw_corner(node){
+		// clockwise : add knot points
+		
+		let crnrs = get_pair_in_order(node.connections);
+		let path = new Path();
+		let knotA = node.point.add(step_vec(crnrs[0],0.5));
+		let knotB = node.point.add(step_vec(crnrs[1],0.5));
+		path.add(knotA);
+		path.add(knotB);
+		
+		// continue clockwise
+		let vec, handle;
+		near = step_vec(crnrs[1],0.3).rotate(90);
+		handle = step_vec(crnrs[1],1).rotate(180);	// handleOut
+		path.add(new Segment({
+			point: node.point.add(near),
+			handleOut: handle.multiply(0.2),
+			handleIn: handle.multiply(0.3).rotate(180)
+		}));
+		// rotate & repeat for next corner
+		near = near.rotate(90);
+		handle = handle.rotate(90);
+		path.add(new Segment({
+			point: node.point.add(near),
+			handleOut: handle.multiply(0.3),
+			handleIn: handle.multiply(0.2).rotate(180)
+		}));
+		path.add(knotA);
+		return path;
+	}
+
+	function draw_trig(node){
+		// get unconnected side from nodes.connections
+		let free_dir = 'udlr'.split('');
+		node.connections.forEach((c)=>{
+			let i = free_dir.indexOf(c);
+			free_dir.splice(i,1);
+		});
+
+		let opp = opposite_dir(free_dir);
+		let knot = step_vec(opp, 0.5);
+		let path = new Path();
+		path.add(node.point.add(knot));
+		knot = knot.rotate(90);
+		path.add(node.point.add(knot));
+		let near = step_vec(free_dir, nr );
+		let handle = step_vec(free_dir, 0.3 ).rotate(90);	// handle out
+		path.add(new Segment({
+			point: node.point.add(near),
+			handleOut: handle,
+			handleIn: handle.rotate(180)
+		}));
+		knot = knot.rotate(180);
+		path.add(node.point.add(knot));
+		knot = knot.rotate(90);
+		path.add(node.point.add(knot));
+		return path;
+		//
+	}
+
+	function draw_cross(node){
+		let knot = step_vec('u',0.5);
+		let path = new Path();
+		path.add(node.point.add(knot));
+			knot = knot.rotate(90);
+		path.add(node.point.add(knot));
+			knot = knot.rotate(90);
+		path.add(node.point.add(knot));
+			knot = knot.rotate(90);
+		path.add(node.point.add(knot));
+			knot = knot.rotate(90);
+		path.add(node.point.add(knot));
+		return path;
+	}
+
+	function prob(p){
+		if( Math.random()<p)
+			return true;
+		else
+			return false;
+	}
+
+	function random(min,max){
+		return min + Math.random()*(max-min);
+	}
+	function random_int(min,max){
+		return Math.floor( min + Math.random()*(max-min) );
+	}
+
+	function get_index_diff(idxB, idxA){
+		return [ idxA[0]-idxB[0] , idxA[1]-idxB[1] ];
+	}
+
+	function index_to_dir(idx){
+		if( idx[0]==1 && idx[1]==0 )
+			return 'r';
+		if( idx[0]==-1 && idx[1]==0 )
+			return 'l';
+		if( idx[0]==0 && idx[1]==1 )
+			return 'd';
+		if( idx[0]==0 && idx[1]==-1 )
+			return 'u';
+		return null;
+	}
+
+	function dir_to_index(dir){
+		if(dir=='r')
+			return [1,0];
+		if(dir=='l')
+			return [-1,0];
+		if(dir=='u')
+			return [0,1];
+		if(dir=='d')
+			return [0,-1];
+		return null;
+	}
+
+	function check_for_neighbours(net, node){
+		let neighb = [];
+		net.forEach((n)=>{
+			let diff = get_index_diff(node.index,n.index);
+			let dir = index_to_dir(diff);
+			if(dir){
+				neighb.push({
+					node: n,
+					dir: dir
+				});
+			}
+		});
+		return neighb;
+	}
+
+	function random_dir(){
+		let r = Math.random();
+		if(r<0.25)
+			return 'u';
+		else if(r<0.5)
+			return 'd';
+		else if(r<0.75)
+			return 'l';
+		else if(r<1)
+			return 'r';
+	}
+
+	// symmetrical partner of index
+	function get_index_pair(net,index){
+		let idx = index.slice();
+		idx[0] = -idx[0];
+		// find node with index
+		let pair;
+		net.forEach((n)=>{
+			if(n.index[0]==idx[0] && n.index[1]==idx[1])
+				pair = n;
+		});
+		return pair;
+	}
+
+	// grows net, only appending, not interconnecting
+	//     creates more labyrinthine nets 
+	function grow_net_v1(net, tree_size)
+	{
+
+		while(net.length<tree_size-1){
+			// if(true){
+				let n = random_int(0, net.length);
+				let node = net[n];
+				
+				let neighbours = check_for_neighbours(net,node);
+				
+				
+				if(neighbours.length<4)
+				{
+					// * chose from free spots
+					let chose_from = 'udlr'.split('');
+					neighbours.forEach((nbr)=>{
+						let i = chose_from.indexOf(nbr.dir);
+						if(i!=-1){
+							chose_from.splice(i,1);
+						}
+					});
+					let sprout_dir = chose_from[ random_int(0,chose_from.length) ];
+	
+					// * a few special cases
+					if(sprout_dir=='u' || sprout_dir=='d'){
+						add_node(net, node, sprout_dir );
+						// * only grow pair vertical if not in center
+						if(node.index[0]!=0){
+							let pair = get_index_pair(net, node.index);
+							add_node(net, pair, sprout_dir );
+						}
+					}
+					else 
+					{
+						// * sprout L and R
+						if(node.index[0]==0){
+							// * center, grow L and R on same node
+							add_node(net, node, 'l' );
+							add_node(net, node, 'r' );
+						}
+						else{
+							// * grow in opposite directions
+	
+							// * catch case when both grow inward
+							if( (node.index[0]==1 && sprout_dir=='l') || (node.index[0]==-1 && sprout_dir=='r') ) 
+							{
+								let mid = add_node(net, node, sprout_dir );
+								let pair = get_index_pair(net, node.index);
+								let opp = opposite_dir(sprout_dir);
+								// then connect to other side
+								mid.connections.push(sprout_dir);
+								pair.connections.push(opp);							
+							}
+							else {
+								// grow both outward
+								add_node(net, node, sprout_dir );
+								let pair = get_index_pair(net, node.index);
+								let opp = opposite_dir(sprout_dir);
+								add_node(net, pair, opp );	
+							}
+							//
+						}
+					}
+					// Eo if <4 neighbours
+				}
+				
+				// Eo loop
+			}
+	}
+
+	function random_free_direction(net,node){
+		let neighbours = check_for_neighbours(net,node);
+		let chose_from = 'udlr'.split('');
+		neighbours.forEach((nbr)=>{
+			let i = chose_from.indexOf(nbr.dir);
+			if(i!=-1){
+				chose_from.splice(i,1);
+			}
+		});
+		return chose_from[ random_int(0,chose_from.length) ];
+	}
+
+	function static_net(net,tree_size){
+		let node = net[0]
+		add_node(net, node, 'u' );
+		add_node(net, node, 'd' );
+		add_node(net, node, 'l' );
+		add_node(net, node, 'r' );
+	}
+	// grows net, trims, and adds connections
+	function grow_net_v2(net, tree_size)
+	{
+		while(net.length<tree_size-1){
+			// if(true){
+				let n = random_int(0, net.length);
+				let node = net[n];
+				
+				let r = Math.random();
+				if(r<p_remove)
+					remove_a_connection(net,node); 
+				else if(r<p_remove+p_join)
+					join_new_neighbour(net,node);
+				else
+					add_neighbour_where_free(net,node);
+				
+				// Eo loop
+			}
+	}
+	
+	function get_node_in_dir(net, node, dir){
+		let step = dir_to_index(dir);
+		let idx = [];
+		idx[0] = step[0] +node.index[0];
+		idx[1] = step[1] +node.index[1];
+		// get node with index
+		let ret;
+		net.forEach((n)=>{
+			if(n.index[0]==idx[0] && n.index[1]==idx[1] )
+				ret = n;
+		});
+		return ret;
+	}
+
+	function remove_connection(node,dir){
+		let i =  node.connections.indexOf(dir);
+		node.connections.splice(i,1);
+	}
+
+	function remove_a_connection(net,node){
+		// only if has more than 1
+		if(node.connections.length>1){		
+			let dir = node.connections[ random_int(0,node.connections.length)];
+			let opp = opposite_dir(dir);
+			let partner;
+
+			if(dir=='u' || dir=='d'){
+				// * remove this one def
+				partner = get_node_in_dir(net,node,dir);
+				remove_connection(node,dir);
+				remove_connection(partner,opp);	
+				// * if not center, remove twin too
+				if(node.index[0]!=0){
+					let twin = get_index_pair(net,node.index);
+					partner = get_node_in_dir(net,twin,dir);
+					remove_connection(twin,dir);
+					remove_connection(partner,opp);	
+				}
+				// Eo u d
+			}
+			else {
+				// L & R 
+				partner = get_node_in_dir(net,node,dir);
+				remove_connection(node,dir);
+				remove_connection(partner,opp);	
+				// remove symmetric pair
+				let pair = get_index_pair(net,node.index);
+				partner = get_node_in_dir(net,pair,opp);
+				remove_connection(pair,opp);
+				remove_connection(partner,dir);	
+				
+				// Eo LR
+			}
+			
+			// if >1 connection
+		}
+		// Eo f
+	}
+
+	function join_new_neighbour(net, node)
+	{
+		let nbrs = check_for_neighbours(net,node);
+		if(node.connections.length != nbrs.length )
+		{
+			// chose unconnected neighbour
+			let unconnected = [];
+			nbrs.forEach((nbr)=>{
+				let dir = nbr.dir;
+				if(!node.connections.includes(dir)){
+					unconnected.push(dir);
+				}
+			});
+			let conn_dir = unconnected[ random_int(0,unconnected.length )];
+			let opp = opposite_dir(conn_dir);
+			let nbr = get_node_in_dir(net,node,conn_dir);
+			// add connection
+			node.connections.push(conn_dir);
+			nbr.connections.push(opp);
+				
+			if(conn_dir=='u' || conn_dir=='d'){
+				// up or down
+				if(node.index[0]!=0){
+					// connect symm pair too
+					let twin = get_index_pair(net,node.index);
+					nbr = get_node_in_dir(net,twin,conn_dir);
+					twin.connections.push(conn_dir);
+					nbr.connections.push(opp);
+				}
+			}
+			else {
+				// L & R
+				if(node.index[0]==0){
+					// connect node to other side too
+					node.connections.push(opp);
+					nbr = get_node_in_dir(net,node,opp);
+					nbr.connections.push(conn_dir);
+				}
+				else{
+					// connect symmetric pair too
+					let twin = get_index_pair(net,node.index);
+					nbr = get_node_in_dir(net,twin,opp);
+					twin.connections.push(opp);
+					nbr.connections.push(conn_dir);
+				}
+				// Eo L R
+			}
+			// Eo neighbours > connecitons
+		}
+		// Eo func
+	}
+
+	
+	function add_neighbour_where_free(net,node){
+		let neighbours = check_for_neighbours(net,node);
+		if(neighbours.length<4)
+		{			
+			// * chose from free spots
+			let sprout_dir = random_free_direction(net,node);
+			
+			let idx = dir_to_index(sprout_dir);
+			idx[0] += node.index[0];
+			idx[1] += node.index[1];
+
+			// * a few special cases
+			if(sprout_dir=='u' || sprout_dir=='d'){
+				add_node(net, node, sprout_dir );
+				// * only grow pair vertical if not in center
+				if(node.index[0]!=0){
+					let pair = get_index_pair(net, node.index);
+					add_node(net, pair, sprout_dir );
+				}
+			}
+			else 
+			{
+				// * sprout L and R
+				if(node.index[0]==0){
+					// * center, grow L and R on same node
+					add_node(net, node, 'l' );
+					add_node(net, node, 'r' );
+				}
+				else{
+					// * grow in opposite directions
+
+					// * catch case when both grow inward
+					if( (node.index[0]==1 && sprout_dir=='l') || (node.index[0]==-1 && sprout_dir=='r') ) 
+					{
+						let mid = add_node(net, node, sprout_dir );
+						let pair = get_index_pair(net, node.index);
+						let opp = opposite_dir(sprout_dir);
+						// then connect to other side
+						mid.connections.push(sprout_dir);
+						pair.connections.push(opp);							
+					}
+					else {
+						// grow both outward
+						add_node(net, node, sprout_dir );
+						let pair = get_index_pair(net, node.index);
+						let opp = opposite_dir(sprout_dir);
+						add_node(net, pair, opp );	
+					}
+					//
+				}
+				
+				// Eo L or R
+			}
+			// else	console.log(' node ', node.index,' dir: ', sprout_dir,' >> space ', idx, '  not empty'); 
+			
+			// Eo if <4 neighbours
+		}
+		
+	}
+
+	function get_net_index(net, node){
+		let id = -1;
+		for(let n=0; n<net.length; n++){
+			if(net[n].id==node.id)
+				id = n;
+		}
+		return id;
+	}
+
+
+	function cut_holes_in_it(net,holes){
+		// go through net and remove nodes
+		for(let h=0; h<holes; h++){
+			// chose random node
+			let r = random_int(0, net.length);
+			let node = net[r];
+
+			node.connections.forEach((dir)=>{
+				let opp = opposite_dir(dir);
+				let neighb = get_node_in_dir(net,node,dir);
+				let i = neighb.connections.indexOf(opp);
+				neighb.connections.splice(i,1);
+			});
+			net.splice(r,1);
+
+			if(node.index[0]!=0){
+				// remove pair too
+				let pair = get_index_pair(net,node.index);
+				
+				pair.connections.forEach((dir)=>{
+					// remove connection for each connection
+					let opp = opposite_dir(dir);
+					let neighb = get_node_in_dir(net,pair,dir);
+					let i = neighb.connections.indexOf(opp);
+					neighb.connections.splice(i,1);
+				});
+				// remove pair node
+				let ix = get_net_index(net,pair);
+				net.splice(ix,1);
+			}
+			// Eo for
+		}
+		//
+	}
+
+	function split_path(group){
+		// split path up into bits
+		group.children.forEach((path)=>{
+			if(path.closed)
+				path.split(0);
+			while(path.segments.length>2){
+				// remove last 2 segments
+				let loc = path.getLocationOf(path.segments[path.segments.length-2].point);
+				let split = path.splitAt(loc);
+				group.addChild(split);
+			}
+		});
+	}
+
+
+	const tolerance = 0.1
+	
+	function path_grad_at_point(path,p){
+		let off = path.getOffsetOf(p)
+		if(off===null)
+			return;
+		let tang = path.getTangentAt(off).angle
+			return tang;
+	}
+	
+	
+	const grad_toler = 17
+	function grad_pair_one(grads){
+		let ret;
+		let diffs = []
+		for(let x=1;x<grads.length;x++){
+			let d = Math.abs(grads[0]-grads[x])
+			diffs.push(d)
+			if( Math.abs(d-180)<grad_toler || d<grad_toler  ){
+				ret = x;
+				break;
+			}
+		}
+		if(!ret)	console.log(diffs)
+		return ret;
+	}
+	
+
+	function join_four(juncs){
+		let paths = []
+		let grads = []
+		let ids = []
+		juncs.forEach((j)=>{ 
+			ids.push(j.segment.path.id)
+			paths.push(j.segment.path)
+			grads.push(path_grad_at_point(j.segment.path,j.segment.point))
+		})
+		let one = grad_pair_one(grads)
+		// console.log(one, ' from ',grads,' \t IDS ', ids )
+		if(typeof one === 'number'){
+			join_two(juncs[0],juncs[one])
+			let others = static.remove_from_list([1,2,3],one)
+			join_two(juncs[others[0]],juncs[others[1]]) 
+		}
+		else {
+			console.error(' NO PARTNER FOUND !!>?!?!', grads)
+		}
+	}
+  
+	function join_one(junc){
+	  let pth = junc.segment.path
+	  if(!pth.closed){
+		let d = pth.firstSegment.point.subtract(pth.lastSegment.point).length
+		if(d<tolerance){
+		  // * Close
+		  let handle = pth.firstSegment.handleOut
+		  pth.removeSegment(0)
+		  pth.closed = true
+		  pth.lastSegment.handleOut = handle
+		  // remove first or last, and transfer handle
+		}
+	  }
+	}
+
+	
+	function join_two(jA,jB){
+		let pathA = jA.segment.path
+		let pathB = jB.segment.path
+		let dists = [
+			static.getDistance(pathA.firstSegment.point,pathB.firstSegment.point),
+			static.getDistance(pathA.lastSegment.point,pathB.lastSegment.point),
+			static.getDistance(pathA.firstSegment.point,pathB.lastSegment.point),
+			static.getDistance(pathA.lastSegment.point,pathB.firstSegment.point),
+		]
+		if(pathA.id===pathB.id)
+			console.log('!!!ID',pathA.id,pathB.id)
+		let smallest = static.smallest(dists)
+		if(dists[smallest]<tolerance){
+			if(smallest<=1)	   pathB.reverse()
+			pathA.join(pathB)
+		}
+		else {
+			console.error(' COULDNT JOIN ',jA,jB )
+			return false
+		}
+	}
+  
+	function join_two_old(juncA, juncB){
+	  let pathA = juncA.segment.path
+	  let pathB = juncB.segment.path
+	  let d = pathA.firstSegment.point.subtract(pathB.firstSegment.point).length
+	  let e = pathA.lastSegment.point.subtract(pathB.lastSegment.point).length
+	  if(d<tolerance || e<tolerance)  
+	  	pathB.reverse()
+	  pathA.join(pathB,tolerance)
+	}
+
+	function join_junction(j){
+		if(j.length==4 ){ 
+			join_four(j)
+			return true
+		}
+		else
+			return false
+	}
+	function join_junctions(){	// jj
+		
+		var finished = false
+		while(!finished)
+		{
+			var index = 0
+			var Nbefore = kolam.children.length;
+			while(index<kolam.children.length)
+			{
+				let ch = kolam.children[index]
+				let jFirst = kolam.hitTestAll(ch.firstSegment.point)
+				if(jFirst && join_junction(jFirst)){
+					allDone = false
+				}
+				else {
+					let jLast = kolam.hitTestAll(ch.lastSegment.point)
+					if(jLast && join_junction(jLast)){
+						allDone = false
+					}
+				}
+				index++
+				// Eo while
+			}
+			if(Nbefore==kolam.children.length)
+				finished = true
+			// * Eo finished
+		}
+		
+		//
+	}
+	
+	function join_junc_two(junc){ //jjt
+		if(junc.length==2){
+			let j = join_two(junc[0],junc[1])
+			if(j===false)
+				return false
+			else return true
+		}
+		return false
+	}
+	function join_part_two(){
+
+		var finished = false
+
+		while(!finished)
+		{
+			var noChange = true
+			var indx = 0
+
+			while(indx<kolam.children.length)
+			{
+				let path = kolam.children[indx]
+				let jFirst = kolam.hitTestAll(path.firstSegment.point)
+				
+				
+				if(join_junc_two(jFirst)){
+					noChange = false
+				}
+				else {
+					let jLast = kolam.hitTestAll(path.lastSegment.point)
+
+					if(join_junc_two(jLast)){
+						noChange = false
+					}
+					else {
+						indx++;
+					}
+					//
+				}
+			}
+
+			if(noChange){
+				finished = true
+			}
+
+			// Eo while 
+		}
+
+		
+	}
+
+	function join_kolam(){
+		
+		// join_junctions()
+
+		join_part_two()
+
+		// kolam.strokeColor = 'white'
+		
+		
+	}
+	
+	function random_colour_children(group){
+		group.children.forEach((ch,i)=>{
+			ch.strokeColor = new Color({
+				hue: random_int(0,360),
+				saturation: random(0.5,1),
+				brightness: random(0.5,1)
+			});
+		})
+	}
+
+	var net, backG, kolam;
+
+	function main(){	// xx
+
+		// setup nodes
+		
+		backG = new Path.Rectangle({
+			point: [0,0],
+			size: view.size,
+			fillColor: 'black'
+		});
+
+		grid = 30	//random_int(20,60);
+		tree_size = random_int(60,160);
+		nr =  0.29	//random(0.2,0.35);  	// kolam curvature
+		
+		str_th = random_int(1,grid/3);
+		
+		net = []
+		kolam = new Group()
+		// net = first_node();
+		// net[0].point = view.center;
+		// kolam = draw_net(net)
+		// kolam.strokeColor = 'blue'
+
+		// Eo main
+	}
+	main();
+
+	// view.onFrame = function(event) {	}
+
+	const cursor = {
+		dot: new Path.Circle({
+			fillColor: 'white',
+			radius: 2,
+			center: [0,0]
+		}),
+	}
+	var deleting = false;
+
+	function nearest_grid_point(p){
+		let v = p.subtract(view.center)
+		return new Point(Math.round(v.x/grid)*grid, Math.round(v.y/grid)*grid )
+	}
+
+	function update_cursor(p){
+		let g = nearest_grid_point(p)
+		if(!g.equals(cursor.pos)){
+			cursor.last = cursor.pos 
+			cursor.pos = g
+			cursor.idx = [g.x/grid,g.y/grid]
+			cursor.dot.position = view.center.add(g)
+			return true;
+		}
+		return;
+	}
+	tool.onMouseMove = function(event){
+		update_cursor(event.point)
+		//
+	}
+
+	tool.onMouseDown = function(event){
+		let g = nearest_grid_point(event.point)
+		// * node		
+		if(!deleting){
+			let n = get_or_make_node(net,cursor.idx)
+			cursor.lastNode = n
+		}
+		else {
+			remove_node(net,cursor.idx)		
+		}
+		cursor.idxLast = [g.x/grid,g.y/grid]
+	}
+	tool.onMouseUp = (ev)=>{
+		redraw()
+	}
+	
+	function connect_indexes(indexFrom,indexTo){
+		
+		let diff = get_index_diff(indexFrom,indexTo)
+		let dir = index_to_dir(diff)
+
+		if(!dir)
+			return;
+
+		let opp = opposite_dir(dir)
+
+		let nodeFrom = get_or_make_node(net,indexFrom) 
+		let nodeTo = get_or_make_node(net,indexTo) 
+		
+		if(!nodeFrom[dir])	nodeFrom[dir] = nodeTo
+		if(!nodeFrom.connections.includes(dir))	
+			nodeFrom.connections.push(dir)
+		
+		if(!nodeTo[opp])	nodeTo[opp] = nodeFrom
+		if(!nodeTo.connections.includes(opp))	
+			nodeTo.connections.push(opp)
+	}
+
+	
+	tool.onMouseDrag = function(ev){
+		if(update_cursor(ev.point)){
+			if(!deleting){
+				// connect last two nodes
+				connect_indexes(cursor.idxLast,cursor.idx)
+				cursor.lastNode = get_or_make_node(net,cursor.idx)
+				redraw()
+			}
+			else {
+				remove_node(net,cursor.idx)
+				redraw()
+			}
+			cursor.idxLast = cursor.idx
+		}
+	}
+
+	function redraw(){
+		static.clearGroup(kolam)
+		kolam = draw_net(net)
+		kolam.strokeColor = 'blue'
+	}
+
+	function get_node(net,idx){
+		let node;
+		for(let x=0; x<net.length; x++){
+			let n = net[x]
+			if(n.index[0]===idx[0] && n.index[1]===idx[1]){
+				node = n;
+				break;
+			}
+		}
+		return node;
+	}
+
+	function remove_node(net,idx){
+		// check it exists
+		let n = get_node(net,idx)
+		if(n){	
+			n.connections.forEach((dir)=>{
+				let opp = opposite_dir(dir)
+				delete n[dir].opp
+				let i = n[dir].connections.indexOf(opp)
+				n[dir].connections.splice(i,1)
+				// console.log(dir,n[dir])					
+			})
+			rmv_node(net,idx)
+		}
+	}
+
+	function rmv_node(net,idx){
+		for(let x=0; x<net.length; x++){
+			let n = net[x]
+			if(n.index[0]===idx[0] && n.index[1]===idx[1]){
+				net.splice(x,1)
+				break;
+			}
+		}
+	}
+
+	function get_or_make_node(net,idx){
+		let node = get_node(net,idx);
+		if(node)	return node;
+		
+		// Create node
+		node = new_node(net.length)
+		node.index = idx
+		node.point = view.center.add([idx[0]*grid,idx[1]*grid])
+		net.push(node)
+		return node;
+	}
+
+	var idxk = 0
+
+	tool.onKeyDown = (ev)=>{
+		if(ev.key==='j'){
+			console.log(' JOIN ')
+			split_path(kolam)
+		
+			join_junctions()
+
+			join_part_two()
+
+			random_colour_children(kolam)
+		}
+		else if(['x','d'].includes(ev.key)){
+			if(!deleting){
+				deleting = true;
+				cursor.dot.fillColor = 'red'
+			}
+			else {
+				deleting = false
+				cursor.dot.fillColor = 'white'
+			}
+		}
+
+
+	}
+
+
+	
+	// Here is a way with JS		https://www.mikechambers.com/blog/2014/07/01/saving-svg-content-from-paper.js/
+	function downloadDataUri(options) {
+		if (!options.url)
+			options.url = "http://download-data-uri.appspot.com/";
+		$('<form method="post" action="' + options.url
+			+ '" style="display:none"><input type="hidden" name="filename" value="'
+			+ options.filename + '"/><input type="hidden" name="data" value="'
+			+ options.data + '"/></form>').appendTo('body').submit().remove();
+	}
+	
+	$('#export-button').click(function() {
+		// http://paperjs.org/reference/project/#exportsvg
+		let export_options = {
+			'bounds': 'view',	// 'content' uses outer stroke bounds
+			'precision' : 5,	// amount of fractional digits in numbers used in SVG data 
+			'asString': true 
+		}
+		var svg = project.exportSVG(export_options);
+		downloadDataUri({
+			data: 'data:image/svg+xml;base64,' + btoa(svg),
+			filename: 'export.svg'
+		});
+	});
+	
+	// view.draw();
+}
+

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+    <title>Creative Technologist</title>
+    <meta name="robots" content="index,follow,noodp">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="content-language" content="en">
+    <meta name="language" content="english, en">
+    
+    <script type="text/javascript" src="/js/jquery341.min.js" ></script>
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script> -->
+    
+    <style type="text/css">
+        
+        html {
+            padding: 0;
+        }
+
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            /* font-size: 16px; */
+            color:              black;
+            background-color:   #fffef5; /*#fffcd2;*/
+            margin: 0;
+            padding: 0;
+        }
+
+        #main-flex {
+            width: 100%;
+            height: 100vh;
+
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background-color: #000;
+            color: #fff;
+
+            flex: 0 0 auto;
+
+            padding-left: 15%;
+            padding-bottom: 28px;
+        }
+
+        .header a {
+            color: inherit;
+        }
+
+        .main {
+            flex: 1 0 auto;
+
+            padding-left: 100px;
+            padding-right: 30%;
+            padding-top: 20px;
+
+            text-align: justify;
+        }
+
+        .main-h {
+            font-size: 22px;
+            margin-top: 18px;
+            margin-bottom: 8px;
+        }
+
+        .main-b {
+            font-weight: bold;
+        }
+        
+    </style>
+
+</head>
+<body>
+    <div id="main-flex">
+        <div class="header">
+            <h1>Thomas Britnell</h1>
+            <h2>Creative Technologist</h2>        
+            <p>Why don't you help me write down my summary, hit the ANY key to get started. </p>
+        </div>
+        <div class="main">
+            
+        </div> 
+    </div>
+
+        <script type="text/javascript" src="/js/intro.js" ></script>
+
+        <script>
+            let $header = document.getElementsByClassName('header')[0]
+            let $main = document.getElementsByClassName('main')[0]
+
+            var text, ray=[], p;
+
+            function pop_first(aray){
+                let x = aray[0]
+                aray.splice(0,1)
+                return x
+            }
+
+            function fakeType(){
+                // new paragraph
+                if(ray.length==0){
+                    text = pop_first(texts)
+                    console.log(' P: ', text )
+                    ray = text.split(' ')
+                    p = document.createElement('div')
+                    p.className = 'main-p'
+                    $main.appendChild(p)
+                }
+
+                // pop word
+                let word = pop_first(ray)
+                p.textContent += word + ' '
+            }
+            document.onkeydown = (ev)=>{
+                ev.preventDefault()
+                fakeType()
+            }
+            $header.onmouseover = ()=>{
+                // TweenMax.to($header,0.5,{backgroundColor: '#000', color: '#fff'})
+                // TweenMax.to($main,0.5,{backgroundColor: '#fff', color: '#000'})
+            }
+            $main.onmouseover = ()=>{
+                // TweenMax.to($header,0.5,{backgroundColor: '#fff', color: '#000'})
+                // TweenMax.to($main,0.5,{backgroundColor: '#000', color: '#fff'})
+            }
+        </script>
+
+</body></html>
